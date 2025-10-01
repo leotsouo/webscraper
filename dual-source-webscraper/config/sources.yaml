@@ -1,0 +1,28 @@
+# Configure your two sources here.
+# Fill in 'list_url' and CSS/XPath selectors for fields.
+# Example provided for structure only; replace with your actual targets.
+sources:
+  - name: static_site_example
+    type: static
+    list_url: "https://example.com/products"
+    item_selector: "div.card.product"
+    fields:
+      id: "div.card.product @ data-id"    # attribute selector syntax: "<css> @ <attr>"
+      title: "h2.title"
+      url: "a.details @ href"
+      author: "span.vendor"
+      category: "span.category"
+      date: "time @ datetime"             # will normalize to YYYYMMDD
+      price: "span.price"                 # numeric validation required
+  - name: dynamic_site_example
+    type: dynamic
+    list_url: "https://example.org/articles"
+    item_selector: "article.post"
+    fields:
+      id: "article.post @ data-id"
+      title: "h2 a"
+      url: "h2 a @ href"
+      author: "span.author"
+      category: "a.tag"
+      date: "time @ datetime"
+      price: ""                           # optional; can be empty for non-commerce
