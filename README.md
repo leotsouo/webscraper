@@ -18,33 +18,64 @@
 
 ## 快速開始
 
-### 1. 建立環境
+### 1) 取得專案
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+git clone https://github.com/<你的帳號>/webscraper.git
+cd webscraper
+
+```
+
+### 2. 建立與啟用虛擬環境
+```bash
+py -3.12 -m venv .venv
+. .\.venv\Scripts\Activate.ps1
+python -V   # 應顯示 3.12.x
+```
+
+### 3. 安裝依賴與瀏覽器
+```bash
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
-python -m playwright install   # 第一次安裝瀏覽器
+python -m playwright install
+# Linux 可能還需要：python -m playwright install-deps
 ```
 
-### 2. 第一次執行（建立初始快照）
+### 4. 第一次執行（產生快照）
 ```bash
-bash run_first_time.sh
+python -m src.interface.cli scrape --config config/sources.yaml --out data/snapshots
+python -m src.interface.cli clean  --snapshots data/snapshots
 ```
 
-### 3. 第二次（或後續）執行（產生差異報告）
+### 5. 第二次執行（再抓一次 → 做差異）
 ```bash
-bash run_incremental.sh
-```
+python -m src.interface.cli scrape --config config/sources.yaml --out data/snapshots
+python -m src.interface.cli clean  --snapshots data/snapshots
 
-### 4. 查看 CLI 幫助
+python -m src.interface.cli diff   --snapshots data/snapshots --diffs data/diffs --charts data/charts
+```
+<img width="427" height="187" alt="image" src="https://github.com/user-attachments/assets/7a85539f-3450-4e2d-9295-5e3ea8bcf7b9" />
+### 6) 快速驗證（別盲信自己跑對了）
 ```bash
-python -m interface.cli --help
+python -c "import pandas as pd, pathlib; p=sorted(pathlib.Path('data/snapshots').glob('snapshot_*.csv'))[-1]; df=pd.read_csv(p); print('rows=',len(df)); print(df['source'].value_counts().to_dict())"
+# 期望接近：{'books_static': 200, 'quotes_dynamic_js': 100}
 ```
-
-### 5. 啟動 Streamlit 介面（可選）
+### 7. 想在 demo 製造可解釋的差異？
 ```bash
-streamlit run src/interface/app.py
+第一次把 config/sources.yaml 的 max_pages 設小（如 books=3 / quotes=5），第二次改大（10/10）→ new > 0
+
+反過來（先大後小）→ deleted > 0
 ```
 
+### 常見雷區（90% 卡在這）
+```bash
+ModuleNotFoundError: interface → 用我們的入口：python -m src.interface.cli（或先設 PYTHONPATH=src）。
+
+Playwright 沒裝瀏覽器 → 跑 python -m playwright install；Linux 再加 python -m playwright install-deps。
+
+PowerShell 跑不動 .ps1 → Set-ExecutionPolicy -Scope Process RemoteSigned（當前視窗有效）。
+
+安裝科學套件失敗 → 你不是 3.12？請檢查 python -V；我們已鎖 matplotlib==3.8.4 以用預編譯 wheel。
+```
 ---
 
 ## 專案結構
