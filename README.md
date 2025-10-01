@@ -50,10 +50,10 @@ python -m src.interface.cli clean  --snapshots data/snapshots
 ```bash
 python -m src.interface.cli scrape --config config/sources.yaml --out data/snapshots
 python -m src.interface.cli clean  --snapshots data/snapshots
-
 python -m src.interface.cli diff   --snapshots data/snapshots --diffs data/diffs --charts data/charts
 ```
 <img width="427" height="187" alt="image" src="https://github.com/user-attachments/assets/7a85539f-3450-4e2d-9295-5e3ea8bcf7b9" />
+
 ### 6) 快速驗證（別盲信自己跑對了）
 ```bash
 python -c "import pandas as pd, pathlib; p=sorted(pathlib.Path('data/snapshots').glob('snapshot_*.csv'))[-1]; df=pd.read_csv(p); print('rows=',len(df)); print(df['source'].value_counts().to_dict())"
