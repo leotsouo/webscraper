@@ -1,35 +1,68 @@
-import pandas as pd, re
+import pandas as pd, re, math
 from dateutil import parser as dtparser
 
-def normalize_date(v: str) -> str:
-    if not v: return ""
+def _is_nan(v) -> bool:
     try:
-        d = dtparser.parse(v, dayfirst=False, yearfirst=True)
+        return v is None or (isinstance(v, float) and math.isnan(v))
+    except Exception:
+        return False
+
+def normalize_date(v) -> str:
+    """
+    將各種日期字串正規化為 YYYYMMDD。
+    對於 None / NaN / 非字串都安全處理，無法解析則回傳空字串。
+    """
+    if _is_nan(v):
+        return ""
+    s = str(v).strip()
+    if not s or s.lower() in {"nan", "none", "null"}:
+        return ""
+    # 若本來就是 8 碼數字，直接接受
+    if re.fullmatch(r"\d{8}", s):
+        return s
+    # 嘗試解析其他常見格式
+    try:
+        d = dtparser.parse(s, dayfirst=False, yearfirst=True)
         return d.strftime("%Y%m%d")
     except Exception:
-        # try numeric YYYYMMDD already
-        if re.fullmatch(r"\d{8}", v): return v
         return ""
 
-def to_number(v: str) -> float | None:
-    if v is None: return None
-    s = re.sub(r"[^0-9.\-]", "", str(v))
+def to_number(v):
+    """
+    將價格/數值欄位轉成 float；空值或無法解析則回 None。
+    """
+    if _is_nan(v):
+        return None
+    s = str(v)
+    # 只保留數字、小數點與負號
+    s = re.sub(r"[^0-9.\-]", "", s)
+    if s in {"", "-", ".", "-.", ".-"}:
+        return None
     try:
         return float(s)
     except Exception:
         return None
 
 def clean_df(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty: return df
-    # Normalize columns that might exist
-    if "date" in df.columns:
-        df["date"] = df["date"].map(normalize_date)
-    if "price" in df.columns:
-        df["price"] = df["price"].map(to_number)
-    # create composite key
-    if "source" in df.columns and "id" in df.columns:
-        df["pk"] = df["source"].astype(str) + "::" + df["id"].astype(str)
-        df = df.drop_duplicates(subset=["pk"])
-    # last_seen_at
-    df["last_seen_at"] = pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    if df is None or df.empty:
+        return df if df is not None else pd.DataFrame()
+
+    df = df.copy()  # ← 關鍵 1：避免在 view 上改
+
+    # 確保必要欄位存在
+    for col in ["source", "id", "title", "url", "author", "category", "date", "price"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    # 正規化
+    df["date"] = df["date"].map(normalize_date)
+    df["price"] = df["price"].map(to_number)
+
+    # 複合主鍵、去重
+    df["pk"] = df["source"].astype(str) + "::" + df["id"].astype(str)
+    df = df.drop_duplicates(subset=["pk"]).copy()  # ← 關鍵 2：再 copy 一次
+
+    # last_seen_at（用 loc 指派）
+    df.loc[:, "last_seen_at"] = pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")  # ← 關鍵 3
     return df
+

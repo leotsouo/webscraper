@@ -1,0 +1,32 @@
+# Python/venv
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Playwright/Selenium (若有)
+ms-playwright/
+playwright-report/
+test-results/
+
+# Runtime outputs
+logs/
+*.log
+
+# Data outputs - keep structure only
+data/snapshots/
+data/diffs/
+data/charts/
+!data/**/.gitkeep
+
+# Node (若不小心裝了)
+node_modules/

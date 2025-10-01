@@ -1,28 +1,43 @@
-# Configure your two sources here.
-# Fill in 'list_url' and CSS/XPath selectors for fields.
-# Example provided for structure only; replace with your actual targets.
+# config/sources.yaml
 sources:
-  - name: static_site_example
+  # ─────────────────────────────────────────────
+  # 來源 1：靜態 HTML（≥ 100 筆）
+  # 書籍列表每頁 20 筆，總 50 頁；本設定抓前 10 頁（可依需要調高 max_pages）
+  - name: books_static
     type: static
-    list_url: "https://example.com/products"
-    item_selector: "div.card.product"
+    list_url: "https://books.toscrape.com/catalogue/page-1.html"
+    item_selector: "article.product_pod"
+    pagination:
+      next_selector: "li.next a"
+      max_pages: 10       # 想抓更多就調高，最多到 50
     fields:
-      id: "div.card.product @ data-id"    # attribute selector syntax: "<css> @ <attr>"
-      title: "h2.title"
-      url: "a.details @ href"
-      author: "span.vendor"
-      category: "span.category"
-      date: "time @ datetime"             # will normalize to YYYYMMDD
-      price: "span.price"                 # numeric validation required
-  - name: dynamic_site_example
+      # 沒有明確 data-id，就用連結做 id（最穩定）
+      id: "h3 a @ href"
+      title: "h3 a"
+      url: "h3 a @ href"
+      author: ""          # 列表頁沒有作者，留空即可（不是必填）
+      category: ""        # 列表頁沒有分類（需要進內頁才有），本作業不強制
+      date: ""            # 無日期
+      price: "p.price_color"
+
+  # ─────────────────────────────────────────────
+  # 來源 2：動態（JS 渲染）頁面（≥ 100 筆）
+  # 這個 JS 版的 quotes 需要瀏覽器渲染；每頁約 10 筆，這裡抓 10 頁 → 約 100 筆
+  - name: quotes_dynamic_js
     type: dynamic
-    list_url: "https://example.org/articles"
-    item_selector: "article.post"
+    list_url: "https://quotes.toscrape.com/js/"
+    item_selector: "div.quote"
+    # 這個站不是滾動載入，而是有「下一頁」按鈕
+    pagination:
+      next_selector: "li.next a"
+      max_pages: 10
     fields:
-      id: "article.post @ data-id"
-      title: "h2 a"
-      url: "h2 a @ href"
-      author: "span.author"
-      category: "a.tag"
-      date: "time @ datetime"
-      price: ""                           # optional; can be empty for non-commerce
+      # 沒有穩定 id，用內容當作 id（或讓程式 fallback 用 title/url）
+      # 這裡把名言文字當作 title；若你想更穩，可以之後在程式端做 hash
+      id: "span.text"
+      title: "span.text"
+      url: ""             # 單條 quote 沒有獨立 URL，留空
+      author: "small.author"
+      category: "a.tag"   # 多個 tag 時只會拿到第一個；可接受
+      date: ""            # 無日期
+      price: ""           # 無價格

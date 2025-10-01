@@ -7,6 +7,8 @@ def load_csv(path: str) -> pd.DataFrame:
 def diff_snapshots(prev_path: str, curr_path: str):
     prev = load_csv(prev_path)
     curr = load_csv(curr_path)
+
+    # 補 pk
     for df in (prev, curr):
         if "pk" not in df.columns and {"source","id"}.issubset(df.columns):
             df["pk"] = df["source"].astype(str) + "::" + df["id"].astype(str)
@@ -18,11 +20,16 @@ def diff_snapshots(prev_path: str, curr_path: str):
     del_keys = prev_idx.index.difference(curr_idx.index)
     common_keys = prev_idx.index.intersection(curr_idx.index)
 
+    # 忽略這些會變動或不該作為內容差異的欄位
+    ignore_cols = {"last_seen_at"}
+
     changed_rows = []
     for k in common_keys:
         a, b = prev_idx.loc[k], curr_idx.loc[k]
-        diffs = {col: {"old": a.get(col, ""), "new": b.get(col, "")}
-                 for col in curr.columns if col in prev.columns and a.get(col,"") != b.get(col,"")}
+        diffs = {}
+        for col in (set(curr.columns) & set(prev.columns)) - ignore_cols:
+            if a.get(col, "") != b.get(col, ""):
+                diffs[col] = {"old": a.get(col, ""), "new": b.get(col, "")}
         if diffs:
             changed_rows.append({"pk": k, "diffs": diffs})
 

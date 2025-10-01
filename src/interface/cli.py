@@ -1,10 +1,10 @@
 import argparse, yaml, pandas as pd, pathlib, sys
-from datetime import datetime
-from scraper.static_scraper import scrape_static
-from scraper.dynamic_scraper import scrape_dynamic
-from pipeline.clean import clean_df
-from pipeline.storage import write_snapshot, latest_two_snapshots
-from pipeline.diff import diff_snapshots, write_outputs, chart_summary
+from src.scraper.static_scraper import scrape_static
+from src.scraper.dynamic_scraper import scrape_dynamic
+from src.pipeline.clean import clean_df
+from src.pipeline.storage import write_snapshot, latest_two_snapshots
+from src.pipeline.diff import diff_snapshots, write_outputs, chart_summary
+
 
 def now_stamp():
     return datetime.now().strftime("%Y%m%d")
