@@ -171,17 +171,6 @@ dual-source-webscraper/
 └─ README.md
 ```
 
----
-
-## 作業交付檢查清單
-- [V] 程式碼 + README  
-- [V] 初次與後續快照（CSV）  
-- [V] `diff_YYYYMMDD.csv` + `summary.json`  
-- [x] 3–5 張 PNG 圖表（由 `pipeline/diff.py` 產生）  
-- [x] 6–10 頁技術報告（請放到 `report/` 目錄下，自行撰寫）  
-
----
-
 ## 注意事項
 - **robots.txt**：會自動檢查，不允許的網址不會爬。  
 - **退避策略**：遇到 429/5xx 會自動延遲後重試。  
