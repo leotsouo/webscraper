@@ -36,6 +36,7 @@ python -V   # 應顯示 3.12.x
 ```bash
 python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+python -m pip install playwright requests beautifulsoup4 lxml pandas matplotlib streamlit
 python -m playwright install
 # Linux 可能還需要：python -m playwright install-deps
 ```
@@ -51,15 +52,22 @@ python -m src.interface.cli clean  --snapshots data/snapshots
 python -m src.interface.cli scrape --config config/sources.yaml --out data/snapshots
 python -m src.interface.cli clean  --snapshots data/snapshots
 python -m src.interface.cli diff   --snapshots data/snapshots --diffs data/diffs --charts data/charts
+# diff 比對差異產生圖，差異數據放在 data/diffs，圖放在 data/charts
 ```
 <img width="427" height="187" alt="image" src="https://github.com/user-attachments/assets/7a85539f-3450-4e2d-9295-5e3ea8bcf7b9" />
 
-### 6) 快速驗證（別盲信自己跑對了）
+### 6. 視覺化網頁
+```bash
+python -m streamlit run app.py
+# 若是沒要跳出網頁，而是終端機出現 email ，點 enter 後，終端機才會繼續往下跑
+```
+
+### 7) 快速驗證（別盲信自己跑對了）
 ```bash
 python -c "import pandas as pd, pathlib; p=sorted(pathlib.Path('data/snapshots').glob('snapshot_*.csv'))[-1]; df=pd.read_csv(p); print('rows=',len(df)); print(df['source'].value_counts().to_dict())"
 # 期望接近：{'books_static': 200, 'quotes_dynamic_js': 100}
 ```
-### 7. 想在 demo 製造可解釋的差異？
+### 8. 想在 demo 製造可解釋的差異？
 ```bash
 第一次把 config/sources.yaml 的 max_pages 設小（如 books=3 / quotes=5），第二次改大（10/10）→ new > 0
 
@@ -95,6 +103,7 @@ dual-source-webscraper/
 ├─ tests/                 # pytest 測試
 ├─ run_first_time.sh      # 初次執行腳本
 ├─ run_incremental.sh     # 增量更新腳本
+├─ app.py                 # 以網頁顯示視覺化結果
 ├─ requirements.txt
 ├─ pyproject.toml
 └─ README.md
