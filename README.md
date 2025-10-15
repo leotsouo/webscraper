@@ -117,3 +117,15 @@ dual-source-webscraper/
 - **資料正規化**：日期統一轉為 `YYYYMMDD`，價格轉數值。  
 - **唯一鍵**：以 `(source, id)` 作為主鍵。  
 - **last_seen_at**：每次更新會記錄 UTC 時間。
+
+
+## 安裝
+
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+# source .venv/bin/activate
+
+pip install -r requirements.txt
