@@ -1,149 +1,217 @@
 # src/scraper/dynamic_scraper.py
-
 import pandas as pd
-from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
-from .utils import allowed_by_robots, polite_delay
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import time
 
-RETRY_STATUSES = {429, 500, 502, 503, 504}
-MAX_RETRIES = 4
-BASE_DELAY = 1.0
+# ───────── utils ─────────
+def _abs_url(u: str, prefix: str | None) -> str:
+    if not u:
+        return ""
+    if urlparse(u).netloc:
+        return u
+    return urljoin(prefix, u) if prefix else u
 
-def exponential_backoff(attempt: int, base_delay: float = BASE_DELAY) -> float:
-    """指數退避: 1s, 2s, 4s, 8s..."""
-    return base_delay * (2 ** (attempt - 1))
+def _norm(s: str) -> str:
+    return " ".join((s or "").split())
 
-def navigate_with_retry(page: Page, url: str, max_retries: int = MAX_RETRIES):
-    """
-    Playwright 頁面導航 + 重試機制
-    處理 429/5xx 錯誤和超時
-    """
-    last_exc = None
-    
-    for attempt in range(1, max_retries + 1):
+def _paths(x):
+    if isinstance(x, dict) and "any" in x:
+        return x["any"] or []
+    if isinstance(x, str) and x:
+        return [x]
+    return []
+
+def _click_any(page, selectors, timeout_ms=5000):
+    if not selectors:
+        return False
+    for sel in selectors:
         try:
-            resp = page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            sc = resp.status if resp else 200
-            
-            # 檢查狀態碼
-            if sc in RETRY_STATUSES:
-                if attempt < max_retries:
-                    # 檢查 Retry-After header
-                    ra = resp.headers.get("retry-after") if resp else None
-                    wait = float(ra) if ra else exponential_backoff(attempt)
-                    
-                    print(f"HTTP {sc} on {url}")
-                    print(f"   Retry {attempt}/{max_retries} after {wait:.1f}s...")
-                    time.sleep(wait)
-                    continue
-                else:
-                    raise RuntimeError(f"HTTP {sc} after {max_retries} retries")
-            
-            return resp
-            
-        except PlaywrightTimeoutError as e:
-            last_exc = e
-            if attempt < max_retries:
-                wait = exponential_backoff(attempt)
-                print(f"Timeout on {url}")
-                print(f"   Retry {attempt}/{max_retries} after {wait:.1f}s...")
-                time.sleep(wait)
-            else:
-                raise
-    
-    if last_exc:
-        raise last_exc
+            btn = page.locator(sel).first
+            btn.wait_for(state="visible", timeout=timeout_ms)
+            btn.click()
+            return True
+        except Exception:
+            continue
+    return False
 
-def extract_attr(el, attr):
-    try:
-        return el.get_attribute(attr) or ""
-    except Exception:
+def _do_consent(page, cfg: dict | None):
+    if not cfg:
+        return
+    _click_any(page, cfg.get("click_selector_any", []), cfg.get("timeout_ms", 5000))
+
+def _do_load_more(page, cfg: dict | None):
+    if not cfg:
+        return
+    sels = cfg.get("click_selector_any", [])
+    times = int(cfg.get("times", 0))
+    pause = int(cfg.get("pause_ms", 800))
+    for _ in range(times):
+        clicked = _click_any(page, sels, 3000)
+        if not clicked:
+            break
+        page.wait_for_timeout(pause)
+
+def _do_scroll(page, cfg: dict | None, item_selectors: list[str]):
+    if not cfg:
+        return
+    times = int(cfg.get("times", 0))
+    pause = int(cfg.get("pause_ms", 800))
+    until_new = cfg.get("until_new_items")
+
+    def count_items():
+        counts = []
+        for sel in item_selectors or []:
+            try:
+                counts.append(page.locator(sel).count())
+            except Exception:
+                counts.append(0)
+        return max(counts) if counts else 0
+
+    prev = count_items()
+    for _ in range(times):
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(pause)
+        curr = count_items()
+        if until_new and (curr - prev) < int(until_new):
+            break
+        prev = curr
+
+def _paginate_next(page, next_selector: str, max_pages: int):
+    # 舊式「下一頁」翻頁（quotes.js）
+    for _ in range(max_pages - 1):
+        try:
+            nxt = page.locator(next_selector).first
+            nxt.wait_for(state="visible", timeout=3000)
+            nxt.click()
+            page.wait_for_load_state("domcontentloaded")
+        except Exception:
+            break
+
+def _extract(page, cfg: dict) -> list[dict]:
+    item_selector_any = cfg.get("item_selector_any")
+    item_selector = cfg.get("item_selector")  # 兼容舊寫法
+    fields = cfg.get("fields", {})
+    post = cfg.get("postprocess", {})
+
+    # 選擇命中最多的 item selector
+    chosen_sel, chosen_cnt = None, -1
+    sels = item_selector_any if item_selector_any else ([item_selector] if item_selector else [])
+    for sel in sels:
+        try:
+            c = page.locator(sel).count()
+            if c > chosen_cnt:
+                chosen_sel, chosen_cnt = sel, c
+        except Exception:
+            pass
+    if not chosen_sel:
+        return []
+
+    def get_text(node, css_list):
+        for s in css_list:
+            try:
+                v = node.locator(s).first
+                txt = v.text_content() or ""
+                if txt.strip():
+                    return txt.strip()
+            except Exception:
+                pass
         return ""
 
-def _do_infinite_scroll(page, times=6, wait_ms=500):
-    for _ in range(times):
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-        page.wait_for_timeout(wait_ms)
+    def get_attr(node, css_list, attr):
+        for s in css_list:
+            try:
+                v = node.locator(s).first
+                val = v.get_attribute(attr)
+                if val:
+                    return val.strip()
+            except Exception:
+                pass
+        return ""
 
-def _scrape_items_from_page(page, source_cfg, base_url):
-    elements = page.query_selector_all(source_cfg["item_selector"])
-    rows = []
+    prefix = post.get("make_url_absolute_with_prefix")
+    norm_keys = set(post.get("normalize_whitespace", []))
+    dedup_key = tuple(post.get("dedup_key", [])) or ("id",)
 
-    for el in elements:
-        row = {}
-        for field, selector in source_cfg["fields"].items():
-            if not selector:
-                row[field] = ""
-                continue
-                
-            if "@ " in selector or " @" in selector:
-                css, attr = selector.split("@")
-                node = el.query_selector(css.strip()) or page.query_selector(css.strip())
-                row[field] = extract_attr(node, attr.strip()) if node else ""
-            else:
-                node = el.query_selector(selector) or page.query_selector(selector)
-                row[field] = node.inner_text().strip() if node else ""
-            
-            if field == "url" and row[field]:
-                row[field] = urljoin(base_url, row[field])
-        
-        row["source"] = source_cfg["name"]
-        if not row.get("id"):
-            row["id"] = row.get("url") or row.get("title")
-        
-        rows.append(row)
-    
-    return rows
+    out, seen = [], set()
+    nodes = page.locator(chosen_sel)
+    n = nodes.count()
+    for i in range(n):
+        node = nodes.nth(i)
+
+        # id: 允許 data-article-id 或 href 兩種
+        id_val = ""
+        for s in _paths(fields.get("id")):
+            v = node.locator(s).first
+            # 試 data-article-id
+            try:
+                val = v.get_attribute("data-article-id")
+                if val:
+                    id_val = val.strip()
+                    break
+            except Exception:
+                pass
+            # 試 href
+            try:
+                val = v.get_attribute("href")
+                if val:
+                    id_val = val.strip()
+                    break
+            except Exception:
+                pass
+
+        title = get_text(node, _paths(fields.get("title")))
+        url = get_attr(node, _paths(fields.get("url")), "href")
+        url = _abs_url(url, prefix)
+        author = get_text(node, _paths(fields.get("author")))
+        category = get_text(node, _paths(fields.get("category")))
+        date = get_attr(node, _paths(fields.get("date")), "datetime") or \
+               get_text(node, _paths(fields.get("date")))
+        price = get_text(node, _paths(fields.get("price")))
+
+        rec = {
+            "id": id_val or url,
+            "title": title,
+            "url": url,
+            "author": author,
+            "category": category,
+            "date": date,
+            "price": price,
+        }
+        for k in norm_keys:
+            rec[k] = _norm(rec.get(k, ""))
+
+        key = tuple(rec.get(k, "") for k in dedup_key)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rec)
+    return out
 
 def scrape_dynamic(source_cfg: dict) -> pd.DataFrame:
-    url = source_cfg["list_url"]
-    
-    if not allowed_by_robots(url):
-        raise RuntimeError(f"Blocked by robots.txt: {url}")
-    
-    all_rows = []
-    
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
         page = browser.new_page()
-        
-        # 使用重試機制導航
-        navigate_with_retry(page, url)
-        
-        # 無限捲動 (optional)
-        scroll_cfg = source_cfg.get("infinite_scroll") or {}
-        if scroll_cfg:
-            _do_infinite_scroll(
-                page,
-                times=int(scroll_cfg.get("times", 6)),
-                wait_ms=int(scroll_cfg.get("wait_ms", 500))
-            )
-        
-        polite_delay()
-        
-        # 當前頁
-        all_rows.extend(_scrape_items_from_page(page, source_cfg, url))
-        
-        # 翻頁處理
-        pag = source_cfg.get("pagination") or {}
-        next_sel = pag.get("next_selector")
-        max_pages = int(pag.get("max_pages", 1))
-        
-        for _ in range(max_pages - 1):
-            if not next_sel:
-                break
-            
-            try:
-                page.wait_for_selector(next_sel, timeout=3000)
-                page.click(next_sel)
-                page.wait_for_load_state("networkidle")
-            except PlaywrightTimeoutError:
-                break
-            
-            polite_delay()
-            all_rows.extend(_scrape_items_from_page(page, source_cfg, url))
-        
+        page.goto(source_cfg["list_url"], wait_until="domcontentloaded")
+
+        if source_cfg.get("pagination", {}).get("next_selector"):
+            # 舊式翻頁
+            next_sel = source_cfg["pagination"]["next_selector"]
+            max_p = int(source_cfg["pagination"].get("max_pages", 1))
+            _paginate_next(page, next_sel, max_p)
+        else:
+            # 新式（LINE TODAY）：可選的彈窗 + 連點載入更多 + 滾動
+            _do_consent(page, source_cfg.get("consent"))
+            _do_load_more(page, source_cfg.get("load_more"))
+            _do_scroll(page, source_cfg.get("scroll"), source_cfg.get("item_selector_any", []))
+
+        items = _extract(page, source_cfg)
         browser.close()
-    
-    return pd.DataFrame(all_rows)
+
+    df = pd.DataFrame(items)
+    # 讓 cleaner 安心
+    for col in ["source", "id", "title", "url", "author", "category", "date", "price"]:
+        if col not in df.columns:
+            df[col] = ""
+    df["source"] = source_cfg.get("name", df.get("source", ""))
+    return df

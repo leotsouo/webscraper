@@ -1,0 +1,39 @@
+sources:
+  # 來源 1：靜態（原樣保留）
+  - name: books_static
+    type: static
+    list_url: "https://books.toscrape.com/catalogue/page-1.html"
+    item_selector: "article.product_pod"
+    pagination:
+      next_selector: "li.next a"
+      max_pages: 10
+    fields:
+      id: "h3 a @ href"
+      title: "h3 a"
+      url: "h3 a @ href"
+      author: ""
+      category: ""
+      date: ""
+      price: "p.price_color"
+
+  # 來源 2（淺）：LINE TODAY
+  - name: linetoday_shallow
+    type: dynamic
+    list_url: "https://today.line.me/tw/v3/tab/news"
+    item_selector_any:
+      - "a.ltcp-link[href^='/tw/v3/article/']"
+    fields:
+      id:     { any: [":scope"] }        # 直接取 <a> 的 href 當 id
+      url:    { any: [":scope"] }        # 取 href
+      title:  { any: [".css-1lpnh5o", ":scope"] }  # 先試卡片內文字區，再退回整個 <a> 文字
+      author: { any: [] }
+      category: { any: [] }
+      date:   { any: [] }
+      price:  { any: [] }
+    scroll:
+      times: 3
+      pause_ms: 900
+    postprocess:
+      make_url_absolute_with_prefix: "https://today.line.me"
+      normalize_whitespace: ["title", "author", "category"]
+      dedup_key: ["id"]

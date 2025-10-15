@@ -1,0 +1,37 @@
+sources:
+  - name: books_static
+    type: static
+    list_url: "https://books.toscrape.com/catalogue/page-1.html"
+    item_selector: "article.product_pod"
+    pagination:
+      next_selector: "li.next a"
+      max_pages: 10
+    fields:
+      id: "h3 a @ href"
+      title: "h3 a"
+      url: "h3 a @ href"
+      author: ""
+      category: ""
+      date: ""
+      price: "p.price_color"
+
+  - name: linetoday_deep
+    type: dynamic
+    list_url: "https://today.line.me/tw/v3/tab/news"
+    item_selector_any:
+      - "a.ltcp-link[href^='/tw/v3/article/']"
+    fields:
+      id:     { any: [":scope"] }
+      url:    { any: [":scope"] }
+      title:  { any: [".css-1lpnh5o", ":scope"] }
+      author: { any: [] }
+      category: { any: [] }
+      date:   { any: [] }
+      price:  { any: [] }
+    scroll:
+      times: 8        # 深抓可以多滾幾次
+      pause_ms: 900
+    postprocess:
+      make_url_absolute_with_prefix: "https://today.line.me"
+      normalize_whitespace: ["title", "author", "category"]
+      dedup_key: ["id"]

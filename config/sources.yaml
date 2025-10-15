@@ -1,43 +1,76 @@
-# config/sources.yaml
 sources:
-  # ─────────────────────────────────────────────
-  # 來源 1：靜態 HTML（≥ 100 筆）
-  # 書籍列表每頁 20 筆，總 50 頁；本設定抓前 10 頁（可依需要調高 max_pages）
+  # ─────────────────────────────
+  # 來源 1：靜態（保留原本設定）
   - name: books_static
     type: static
     list_url: "https://books.toscrape.com/catalogue/page-1.html"
     item_selector: "article.product_pod"
     pagination:
       next_selector: "li.next a"
-      max_pages: 10       # 想抓更多就調高，最多到 50
+      max_pages: 10
     fields:
-      # 沒有明確 data-id，就用連結做 id（最穩定）
       id: "h3 a @ href"
       title: "h3 a"
       url: "h3 a @ href"
-      author: ""          # 列表頁沒有作者，留空即可（不是必填）
-      category: ""        # 列表頁沒有分類（需要進內頁才有），本作業不強制
-      date: ""            # 無日期
+      author: ""
+      category: ""
+      date: ""
       price: "p.price_color"
 
-  # ─────────────────────────────────────────────
-  # 來源 2：動態（JS 渲染）頁面（≥ 100 筆）
-  # 這個 JS 版的 quotes 需要瀏覽器渲染；每頁約 10 筆，這裡抓 10 頁 → 約 100 筆
-  - name: quotes_dynamic_js
+  # ─────────────────────────────
+  # 來源 2：LINE TODAY（動態）
+  - name: linetoday_news_dynamic
     type: dynamic
-    list_url: "https://quotes.toscrape.com/js/"
-    item_selector: "div.quote"
-    # 這個站不是滾動載入，而是有「下一頁」按鈕
-    pagination:
-      next_selector: "li.next a"
-      max_pages: 10
+    list_url: "https://today.line.me/tw/v2/tab/top"
+    consent:
+      click_selector_any:
+        - "button:has-text('同意')"
+        - "button:has-text('接受')"
+      timeout_ms: 5000
+    load_more:
+      click_selector_any:
+        - "button:has-text('載入更多')"
+        - "button:has-text('看更多')"
+        - "a:has-text('看更多')"
+      times: 8
+      pause_ms: 1000
+    scroll:
+      times: 8
+      pause_ms: 900
+      until_new_items: 10
+    item_selector_any:
+      - "a[data-article-id]"
+      - "li[class*='ArticleListItem'] a"
+      - "article a[href*='/detail/']"
     fields:
-      # 沒有穩定 id，用內容當作 id（或讓程式 fallback 用 title/url）
-      # 這裡把名言文字當作 title；若你想更穩，可以之後在程式端做 hash
-      id: "span.text"
-      title: "span.text"
-      url: ""             # 單條 quote 沒有獨立 URL，留空
-      author: "small.author"
-      category: "a.tag"   # 多個 tag 時只會拿到第一個；可接受
-      date: ""            # 無日期
-      price: ""           # 無價格
+      id:
+        any:
+          - "a[data-article-id]"
+          - "a"
+      title:
+        any:
+          - "h3"
+          - "span[class*='title']"
+          - "div[class*='title']"
+      url:
+        any:
+          - "a @ href"
+      author:
+        any:
+          - "span[class*='publisher']"
+          - "div[class*='source']"
+          - "span[class*='source']"
+      category:
+        any:
+          - "a[class*='category']"
+          - "span[class*='category']"
+      date:
+        any:
+          - "time @ datetime"
+          - "span[class*='time']"
+      price: ""
+    postprocess:
+      make_url_absolute_with_prefix: "https://today.line.me"
+      normalize_whitespace: ["title","author","category"]
+      dedup_key: ["id"]
+

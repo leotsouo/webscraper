@@ -1,5 +1,16 @@
 import pandas as pd, re, math
 from dateutil import parser as dtparser
+from urllib.parse import urljoin, urlparse   # NEW
+
+LINE_TODAY_PREFIX = "https://today.line.me"  # NEW
+
+def make_abs(u: str) -> str:                 # NEW
+    if not isinstance(u, str) or not u:
+        return ""
+    return u if urlparse(u).netloc else urljoin(LINE_TODAY_PREFIX, u)
+
+def norm(s: str) -> str:                     # NEW
+    return " ".join(str(s or "").split())
 
 def _is_nan(v) -> bool:
     try:
@@ -53,6 +64,16 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["source", "id", "title", "url", "author", "category", "date", "price"]:
         if col not in df.columns:
             df[col] = ""
+
+    # NEW: 先做字串清理（避免空白差異造成 changed 假陽性）
+    for c in ["title", "author", "category"]:
+        df[c] = df[c].map(norm)
+
+     # NEW: URL 絕對化
+    df["url"] = df["url"].map(make_abs)
+
+    # NEW: id 兜底（避免空 id）
+    df["id"] = df.apply(lambda r: r["id"] or r["url"], axis=1)
 
     # 正規化
     df["date"] = df["date"].map(normalize_date)
