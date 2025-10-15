@@ -18,7 +18,7 @@
 
 ## 快速開始
 
-### 1) 取得專案
+### 1. 取得專案
 ```bash
 git clone https://github.com/<你的帳號>/webscraper.git
 cd webscraper
@@ -62,7 +62,7 @@ python -m streamlit run app.py
 # 若是沒要跳出網頁，而是終端機出現 email ，點 enter 後，終端機才會繼續往下跑
 ```
 
-### 7) 快速驗證（別盲信自己跑對了）
+### 7. 快速驗證（別盲信自己跑對了）
 ```bash
 python -c "import pandas as pd, pathlib; p=sorted(pathlib.Path('data/snapshots').glob('snapshot_*.csv'))[-1]; df=pd.read_csv(p); print('rows=',len(df)); print(df['source'].value_counts().to_dict())"
 # 期望接近：{'books_static': 200, 'quotes_dynamic_js': 100}
@@ -72,6 +72,63 @@ python -c "import pandas as pd, pathlib; p=sorted(pathlib.Path('data/snapshots')
 第一次把 config/sources.yaml 的 max_pages 設小（如 books=3 / quotes=5），第二次改大（10/10）→ new > 0
 
 反過來（先大後小）→ deleted > 0
+```
+### 9. Pytest 單元測試
+```bash
+本專案使用 **pytest** 框架進行單元測試，確保各模組功能的正確性與穩定性。
+
+1.
+####  test_selectors.py
+驗證設定檔的載入與結構完整性。
+
+- ✅ 測試 `config/sources.yaml` 能否正確讀取
+- ✅ 驗證設定檔包含 2 個資料來源
+- ✅ 檢查必要欄位：`name`、`type`、`list_url`、`item_selector`
+
+2.
+####  test_validation.py
+測試資料清理與格式化函式。
+
+**日期標準化測試**
+- 將 `2024-01-02` 轉換為 `20240102`
+- 處理已格式化的日期
+- 處理無效日期返回空字串
+
+**數字轉換測試**
+- 解析 `$1,234.56` 轉為 `1234.56`
+- 處理 `N/A` 返回 `None`
+- 正確處理負數值
+
+3.
+####  test_dedup.py
+驗證去重邏輯的正確性。
+
+- 建立包含重複資料的測試 DataFrame（相同 `source` + `id`）
+- 驗證 `clean_df()` 能正確移除重複項目
+- 確認自動產生 `pk`（primary key）欄位
+
+4.
+####  test_diff.py
+測試快照比對功能。
+
+- 建立兩個 CSV 快照檔案（前一次 vs 當前）
+- 驗證 `diff_snapshots()` 能正確識別：
+  - **新增項目**（new）
+  - **刪除項目**（deleted）
+  - **變更項目**（changed）
+
+### 執行測試
+執行所有測試
+pytest tests/
+
+執行特定測試檔案
+pytest tests/test_validation.py
+
+顯示詳細輸出
+pytest -v
+
+顯示測試覆蓋率報告
+pytest --cov=src tests/
 ```
 
 ### 常見雷區（90% 卡在這）
@@ -100,7 +157,12 @@ dual-source-webscraper/
 │  ├─ scraper/            # 靜態與動態爬蟲
 │  ├─ pipeline/           # 清理、儲存、diff 處理
 │  └─ interface/          # CLI 與 Streamlit 介面
+|
 ├─ tests/                 # pytest 測試
+│  ├─ test_dedup/         # 測試去重功能
+│  ├─ test_diff/          # 測試快照比對功能
+│  ├─ test_selectors/     # 驗證設定檔載入與格式正確性
+│  └─ test_validation/    # 測試資料清理與格式化函式
 ├─ run_first_time.sh      # 初次執行腳本
 ├─ run_incremental.sh     # 增量更新腳本
 ├─ app.py                 # 以網頁顯示視覺化結果
@@ -112,9 +174,9 @@ dual-source-webscraper/
 ---
 
 ## 作業交付檢查清單
-- [x] 程式碼 + README  
-- [x] 初次與後續快照（CSV）  
-- [x] `diff_YYYYMMDD.csv` + `summary.json`  
+- [V] 程式碼 + README  
+- [V] 初次與後續快照（CSV）  
+- [V] `diff_YYYYMMDD.csv` + `summary.json`  
 - [x] 3–5 張 PNG 圖表（由 `pipeline/diff.py` 產生）  
 - [x] 6–10 頁技術報告（請放到 `report/` 目錄下，自行撰寫）  
 
