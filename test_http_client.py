@@ -1,6 +1,7 @@
 # test_http_client.py (放在專案根目錄)
+#終端執行 python test_http_client.py
 
-from http_client import get_with_retry, exponential_backoff
+from src.scraper.http_client import get_with_retry, exponential_backoff
 
 # 測試 1: 指數退避計算
 print("=== 測試指數退避 ===")
